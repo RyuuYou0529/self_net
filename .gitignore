@@ -1,2 +1,4 @@
 data/
 test.ipynb
+train.log
+__pycache__
