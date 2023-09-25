@@ -2,59 +2,64 @@ import os
 import numpy as np
 import tifffile
 
-path='/home/ryuuyou/Project/self_net/data/care_liver/'
-raw_data_path = path+'raw_data/'
-train_data_path=path+'train_data/'
+path='/home/ryuuyou/Project/self_net/data/visor'
+raw_data_path = os.path.join(path, 'raw_data/')
+train_data_path=os.path.join(path, 'train_data/')
 
 if not os.path.exists(train_data_path):
     os.mkdir(train_data_path)
 
-xy_path = raw_data_path + 'xy/'
-xy_lr_path = raw_data_path + 'xy_lr/'
-xz_path = raw_data_path + 'xz/'
+hr_path = os.path.join(raw_data_path, 'hr/')
+hr_deg_path = os.path.join(raw_data_path, 'hr_deg/')
+lr_path = os.path.join(raw_data_path, 'lr/')
 
-xy = []
-xy_lr = []
-xz = []
+hr = []
+hr_deg = []
+lr = []
 
 stride = 64
-patch_size = 64
+patch_size = 128
 
 # signal_intensity_threshold=600  #parameter for selecting image patches containing signals
 signal_intensity_threshold=0  #parameter for selecting image patches containing signals
 
-xy_interval=4
-xz_interval=12
+hr_interval=1
+lr_interval=4
 
-for i in range(0, len(os.listdir(xy_path)), xy_interval):
+for i in range(0, len(os.listdir(hr_path)), hr_interval):
 
-    xy_img = tifffile.imread(xy_path + str(i + 1) + '.tif')
-    xy_lr_img = tifffile.imread(xy_lr_path + str(i + 1) + '.tif')
+    hr_img = tifffile.imread(hr_path + str(i) + '.tif')
+    hr_deg_img = tifffile.imread(hr_deg_path + str(i) + '.tif')
     print(i + 1)
 
-    for m in range(0, xy_img.shape[0] - patch_size + 1, stride):
-        for n in range(0, xy_img.shape[1] - patch_size + 1, stride):
-            crop_xy = xy_img[m:m + patch_size, n:n + patch_size]
-            crop_xy_lr = xy_lr_img[m:m + patch_size, n:n + patch_size]
+    # for m in range(0, hr_img.shape[0] - patch_size + 1, stride):
+    #     for n in range(0, hr_img.shape[1] - patch_size + 1, stride):
+    #         crop_hr = hr_img[m:m + patch_size, n:n + patch_size]
+    #         crop_hr_deg = hr_deg_img[m:m + patch_size, n:n + patch_size]
 
-            if np.max(crop_xy >= signal_intensity_threshold):
-                xy.append(crop_xy)
-                xy_lr.append(crop_xy_lr)
+    #         if np.max(crop_hr >= signal_intensity_threshold):
+    #             hr.append(crop_hr)
+    #             hr_deg.append(crop_hr_deg)
 
-for i in range(0, len(os.listdir(xz_path)), xz_interval):
-    xz_img = tifffile.imread(xz_path + str(i + 1) + '.tif')
+    hr.append(hr_img)
+    hr_deg.append(hr_deg_img)
+
+for i in range(0, len(os.listdir(lr_path)), lr_interval):
+    lr_img = tifffile.imread(lr_path + str(i) + '.tif')
     print(i + 1)
 
-    for m in range(0, xz_img.shape[0] - patch_size + 1, stride):
-        for n in range(0, xz_img.shape[1] - patch_size + 1, stride):
-            crop_xz = xz_img[m:m + patch_size, n:n + patch_size]
+    # for m in range(0, lr_img.shape[0] - patch_size + 1, stride):
+    #     for n in range(0, lr_img.shape[1] - patch_size + 1, stride):
+    #         crop_lr = lr_img[m:m + patch_size, n:n + patch_size]
 
-            if np.max(crop_xz >= signal_intensity_threshold):
-                xz.append(crop_xz)
+    #         if np.max(crop_lr >= signal_intensity_threshold):
+    #             lr.append(crop_lr)
 
-xy = np.array(xy, dtype=np.float32)
-xy_lr = np.array(xy_lr, dtype=np.float32)
-xz = np.array(xz, dtype=np.float32)
-print(xy.shape, xy_lr.shape, xz.shape)
+    lr.append(lr_img)
 
-np.savez(path + '/train_data/train_data.npz', xy=xy, xy_lr=xy_lr, xz=xz)
+hr = np.array(hr, dtype=np.float32)
+hr_deg = np.array(hr_deg, dtype=np.float32)
+lr = np.array(lr, dtype=np.float32)
+print(hr.shape, hr_deg.shape, lr.shape)
+
+np.savez(path + '/train_data/train_data.npz', hr=hr, hr_deg=hr_deg, lr=lr)

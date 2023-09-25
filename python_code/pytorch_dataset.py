@@ -1,8 +1,8 @@
 import torch
 import random
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
-
+import os
 
 def augment_img(img, mode=0):
     if mode == 0:
@@ -22,52 +22,44 @@ def augment_img(img, mode=0):
     elif mode == 7:
         return np.flipud(np.rot90(img, k=3))
 
-
-def transform_input_img(img,mode,min_v,max_v):
+def transform_input_img(img,mode,normalize):
     img = augment_img(img,mode)
-    img=np.array(img,dtype=np.float32)
-    img=(img-min_v)/(max_v-min_v)
-    img[img>1]=1
-    img[img<0]=0
+    img=np.asarray(img,dtype=np.float32)
+    img = normalize(img)
     img=np.expand_dims(img,axis=0)
     return torch.from_numpy(img)
 
-def transform_target_img(img,mode,min_v,max_v):
+def transform_target_img(img,mode,normalize):
     img=augment_img(img,mode)
-    img=np.array(img,dtype=np.float32)
-    img = (img-min_v)/ (max_v-min_v)
-    img[img>1]=1
-    img[img < 0] = 0
+    img=np.asarray(img,dtype=np.float32)
+    img = normalize(img)
     img=np.expand_dims(img,axis=0)
     return torch.from_numpy(img)
-
 
 class ImageDataset_numpy(Dataset):
-    def __init__(self,dataset,paired,min_v,max_v):
-        self.xy=dataset['xy']
-        self.xy_lr=dataset['xy_lr']
-        self.xz=dataset['xz']
+    def __init__(self,dataset,paired,normalize):
+        self.hr=dataset['hr']
+        self.hr_deg=dataset['hr_deg']
+        self.lr=dataset['lr']
         self.paired=paired
-        self.min_v=min_v
-        self.max_v=max_v
+        self.normalize=normalize
 
     def __getitem__(self, index):
-
         mode1=np.random.randint(0, 8)
         mode2=np.random.randint(0, 8)
         if self.paired:
-            item_xz = transform_input_img(self.xz[(index)%(self.xz.shape[0])], mode1,self.min_v,self.max_v)
-            item_xy = transform_target_img(self.xy[(index)%(self.xy.shape[0])], mode1,self.min_v,self.max_v)
-            item_xy_lr = transform_target_img(self.xy_lr[(index) % (self.xy_lr.shape[0])], mode1,self.min_v,self.max_v)
+            item_lr = transform_input_img(self.lr[(index)%(self.lr.shape[0])], mode1, self.normalize)
+            item_hr = transform_target_img(self.hr[(index)%(self.hr.shape[0])], mode1, self.normalize)
+            item_hr_deg = transform_target_img(self.hr_deg[(index) % (self.hr_deg.shape[0])], mode1, self.normalize)
         else:
-            item_xz = transform_input_img(self.xz[random.randint(0, (self.xz).shape[0]- 1)], mode1,self.min_v,self.max_v)
-            item_xy = transform_target_img(self.xy[(index)%(self.xy.shape[0])], mode2,self.min_v,self.max_v)
-            item_xy_lr=transform_target_img(self.xy_lr[(index)%(self.xy_lr.shape[0])], mode2,self.min_v,self.max_v)
+            item_lr = transform_input_img(self.lr[random.randint(0, (self.lr).shape[0]- 1)], mode1, self.normalize)
+            item_hr = transform_target_img(self.hr[(index)%(self.hr.shape[0])], mode2, self.normalize)
+            item_hr_deg=transform_target_img(self.hr_deg[(index)%(self.hr_deg.shape[0])], mode2, self.normalize)
 
-        return {'xz': item_xz, 'xy': item_xy, 'xy_lr':item_xy_lr}
+        return {'lr': item_lr, 'hr': item_hr, 'hr_deg':item_hr_deg}
 
     def __len__(self):
-        return max((self.xz).shape[0], (self.xy).shape[0])
+        return max((self.lr).shape[0], (self.hr).shape[0])
 
 
 class ImagePool():
@@ -99,10 +91,16 @@ class ImagePool():
         return_images = torch.cat(return_images, 0)
         return return_images
 
-def create_train_data(train_data_path,batch_size,min_v,max_v):
-
-    dataset=np.load(train_data_path+'train_data.npz')
-    train_data=torch.utils.data.DataLoader(ImageDataset_numpy(dataset,False,min_v,max_v),batch_size=batch_size,shuffle=True)
+def create_train_data(train_data_path, batch_size, normalize_mode: str='min_max'):
+    if normalize_mode == 'min_max':
+        normalize = lambda t:(t-t.min())/(t.max()-t.min())
+    elif normalize_mode == 'z_score':
+        normalize = lambda t:(t-t.mean())/t.std()
+    else:
+        normalize = lambda t:t
+    
+    dataset=np.load(os.path.join(train_data_path, 'train_data.npz'))
+    train_data=DataLoader(ImageDataset_numpy(dataset,False,normalize),batch_size=batch_size,shuffle=True)
 
     print('done data preprocessing!')
     return train_data

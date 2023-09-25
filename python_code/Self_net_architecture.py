@@ -32,9 +32,9 @@ def get_norm_layer(norm_type='instance'):
     For InstanceNorm, we do not use learnable affine parameters. We do not track running statistics.
     """
     if norm_type == 'batch':
-        norm_layer = functools.partial(nn.BatchNorm2d, affine=True, track_running_stats=True)
+        norm_layer = functools.partial(nn.BatchNorm3d, affine=True, track_running_stats=True)
     elif norm_type == 'instance':
-        norm_layer = functools.partial(nn.InstanceNorm2d, affine=False, track_running_stats=False)
+        norm_layer = functools.partial(nn.InstanceNorm3d, affine=False, track_running_stats=False)
     elif norm_type == 'none':
         def norm_layer(x): return Identity()
     else:
@@ -71,7 +71,7 @@ def init_weights(net, init_type='normal', init_gain=0.02):
             if hasattr(m, 'bias') and m.bias is not None:
                 init.constant_(m.bias.data, 0.0)
 
-        elif classname.find('BatchNorm2d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+        elif classname.find('BatchNorm3d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
             init.normal_(m.weight.data, 1.0, init_gain)
             init.constant_(m.bias.data, 0.0)
 
@@ -99,10 +99,10 @@ def define_G(input_nc, output_nc, ngf, netG, device, norm='batch', use_dropout=F
     norm_layer = get_norm_layer(norm_type=norm)
 
     if netG == 'deblur_net':
-        net = Deblur_Net(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=6)
+        net = Deblur_Net_3D(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=4)
 
     elif netG=='care':
-        net=Care_net(input_nc, output_nc, ngf, norm_layer=norm_layer)
+        net=Care_net_3D(input_nc, output_nc, ngf, norm_layer=norm_layer)
 
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
@@ -136,9 +136,9 @@ def define_D(input_nc, ndf, netD, device,n_layers_D=3, norm='batch', init_type='
     net = None
     norm_layer = get_norm_layer(norm_type=norm)
     if netD == 'basic':  # default PatchGAN classifier
-        net = NLayerDiscriminator(input_nc, ndf, n_layers=3, norm_layer=norm_layer)
+        net = NLayerDiscriminator3D(input_nc, ndf, n_layers=3, norm_layer=norm_layer)
     elif netD == 'n_layers':  # more options
-        net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
+        net = NLayerDiscriminator3D(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, device,init_type, init_gain)
@@ -205,10 +205,10 @@ class GANLoss(nn.Module):
 
 
 
-class NLayerDiscriminator(nn.Module):
+class NLayerDiscriminator3D(nn.Module):
     """Defines a PatchGAN discriminator"""
 
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
+    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm3d):
         """Construct a PatchGAN discriminator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -216,22 +216,22 @@ class NLayerDiscriminator(nn.Module):
             n_layers (int)  -- the number of conv layers in the discriminator
             norm_layer      -- normalization layer
         """
-        super(NLayerDiscriminator, self).__init__()
-        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
-            use_bias = norm_layer.func == nn.InstanceNorm2d
+        super(NLayerDiscriminator3D, self).__init__()
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm3d has affine parameters
+            use_bias = norm_layer.func == nn.InstanceNorm3d
         else:
-            use_bias = norm_layer == nn.InstanceNorm2d
+            use_bias = norm_layer == nn.InstanceNorm3d
 
         kw = 4
         padw = 1
-        sequence = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
+        sequence = [nn.Conv3d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]
         nf_mult = 1
         nf_mult_prev = 1
         for n in range(1, n_layers):  # gradually increase the number of filters
             nf_mult_prev = nf_mult
             nf_mult = min(2 ** n, 8)
             sequence += [
-                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
+                nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias),
                 norm_layer(ndf * nf_mult),
                 nn.LeakyReLU(0.2, True)
             ]
@@ -239,12 +239,12 @@ class NLayerDiscriminator(nn.Module):
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** n_layers, 8)
         sequence += [
-            nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+            nn.Conv3d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias),
             norm_layer(ndf * nf_mult),
             nn.LeakyReLU(0.2, True)
         ]
 
-        sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
+        sequence += [nn.Conv3d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]  # output 1 channel prediction map
         self.model = nn.Sequential(*sequence)
 
     def forward(self, input):
@@ -253,9 +253,9 @@ class NLayerDiscriminator(nn.Module):
 
 
 
-class Deblur_Net(nn.Module):
+class Deblur_Net_3D(nn.Module):
 
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect'):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm3d, use_dropout=False, n_blocks=6, padding_type='reflect'):
         """Construct a Resnet-based generator
         Parameters:
             input_nc (int)      -- the number of channels in input images
@@ -268,24 +268,24 @@ class Deblur_Net(nn.Module):
         """
 
         assert(n_blocks >= 0)
-        super(Deblur_Net, self).__init__()
+        super(Deblur_Net_3D, self).__init__()
         use_bias = True
 
-        model = [nn.ReflectionPad2d(3),
-                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),nn.LeakyReLU(0.2,True)]
+        model = [nn.ReflectionPad3d(3),
+                 nn.Conv3d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),nn.LeakyReLU(0.2,True)]
 
         n_1 = 2
         for i in range(n_1):  # add layers
-            model += [nn.Conv2d(ngf , ngf , kernel_size=3, stride=1, padding=1, bias=use_bias),nn.LeakyReLU(0.2,True)]
+            model += [nn.Conv3d(ngf , ngf , kernel_size=3, stride=1, padding=1, bias=use_bias),nn.LeakyReLU(0.2,True)]
 
         for i in range(n_blocks):       # add ResNet blocks
 
-            model += [Res_Block(ngf, padding_type=padding_type, use_dropout=use_dropout, use_bias=use_bias)]
+            model += [Res_Block_3D(ngf, padding_type=padding_type, use_dropout=use_dropout, use_bias=use_bias)]
 
         for i in range(n_1):  # add layers
-            model += [nn.Conv2d(ngf ,ngf,kernel_size=3, stride=1,padding=1,bias=use_bias),nn.LeakyReLU(0.2,True)]
-        model += [nn.ReflectionPad2d(3)]
-        model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+            model += [nn.Conv3d(ngf ,ngf,kernel_size=3, stride=1,padding=1,bias=use_bias),nn.LeakyReLU(0.2,True)]
+        model += [nn.ReflectionPad3d(3)]
+        model += [nn.Conv3d(ngf, output_nc, kernel_size=7, padding=0)]
 
         self.model = nn.Sequential(*model)
 
@@ -294,7 +294,7 @@ class Deblur_Net(nn.Module):
         return self.model(input)
 
 
-class Res_Block(nn.Module):
+class Res_Block_3D(nn.Module):
     """Define a Resnet block"""
 
     def __init__(self, dim, padding_type, use_dropout, use_bias):
@@ -304,7 +304,7 @@ class Res_Block(nn.Module):
         and implement skip connections in <forward> function.
         Original Resnet paper: https://arxiv.org/pdf/1512.03385.pdf
         """
-        super(Res_Block, self).__init__()
+        super(Res_Block_3D, self).__init__()
         self.conv_block = self.build_conv_block(dim, padding_type,use_dropout, use_bias)
 
     def build_conv_block(self, dim, padding_type, use_dropout, use_bias):
@@ -320,28 +320,28 @@ class Res_Block(nn.Module):
         conv_block = []
         p = 0
         if padding_type == 'reflect':
-            conv_block += [nn.ReflectionPad2d(1)]
+            conv_block += [nn.ReflectionPad3d(1)]
         elif padding_type == 'replicate':
-            conv_block += [nn.ReplicationPad2d(1)]
+            conv_block += [nn.ReplicationPad3d(1)]
         elif padding_type == 'zero':
             p = 1
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
 
-        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias), nn.LeakyReLU(0.2,True)]
+        conv_block += [nn.Conv3d(dim, dim, kernel_size=3, padding=p, bias=use_bias), nn.LeakyReLU(0.2,True)]
         if use_dropout:
             conv_block += [nn.Dropout(0.5)]
 
         p = 0
         if padding_type == 'reflect':
-            conv_block += [nn.ReflectionPad2d(1)]
+            conv_block += [nn.ReflectionPad3d(1)]
         elif padding_type == 'replicate':
-            conv_block += [nn.ReplicationPad2d(1)]
+            conv_block += [nn.ReplicationPad3d(1)]
         elif padding_type == 'zero':
             p = 1
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
-        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p, bias=use_bias)]
+        conv_block += [nn.Conv3d(dim, dim, kernel_size=3, padding=p, bias=use_bias)]
 
         return nn.Sequential(*conv_block)
 
@@ -352,55 +352,55 @@ class Res_Block(nn.Module):
 
 
 
-class Care_net(nn.Module):
-    def __init__(self, input_nc=2, output_nc=2, ngf=32,norm_layer=nn.BatchNorm2d):
-        super(Care_net,self).__init__()
+class Care_net_3D(nn.Module):
+    def __init__(self, input_nc=2, output_nc=2, ngf=32,norm_layer=nn.BatchNorm3d):
+        super(Care_net_3D,self).__init__()
 
         if type(norm_layer) == functools.partial:
-            use_bias = norm_layer.func == nn.InstanceNorm2d
+            use_bias = norm_layer.func == nn.InstanceNorm3d
         else:
-            use_bias = norm_layer == nn.InstanceNorm2d
+            use_bias = norm_layer == nn.InstanceNorm3d
 
         downrelu=nn.LeakyReLU(0.2, True)
         uprelu=nn.ReLU(True)
 
-        conv1 = [nn.Conv2d(input_nc,ngf,kernel_size=3,stride=1,padding=1,bias=use_bias), downrelu,
-                 nn.Conv2d(ngf, ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf), downrelu]
+        conv1 = [nn.Conv3d(input_nc,ngf,kernel_size=3,stride=1,padding=1,bias=use_bias), downrelu,
+                 nn.Conv3d(ngf, ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf), downrelu]
         self.down1=nn.Sequential(*conv1)
 
-        self.maxpool1=nn.MaxPool2d(kernel_size=2)
+        self.maxpool1=nn.MaxPool3d(kernel_size=2)
 
-        conv2=[nn.Conv2d(ngf,ngf*2,kernel_size=3,stride=1,padding=1,bias=use_bias),norm_layer(ngf), downrelu,
-                 nn.Conv2d(ngf*2,ngf*2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf), downrelu]
+        conv2=[nn.Conv3d(ngf,ngf*2,kernel_size=3,stride=1,padding=1,bias=use_bias),norm_layer(ngf), downrelu,
+                 nn.Conv3d(ngf*2,ngf*2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf), downrelu]
 
         self.down2 = nn.Sequential(*conv2)
 
-        self.maxpool2 = nn.MaxPool2d(kernel_size=2)
+        self.maxpool2 = nn.MaxPool3d(kernel_size=2)
 
-        conv3 = [nn.Conv2d(ngf * 2, ngf * 4, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+        conv3 = [nn.Conv3d(ngf * 2, ngf * 4, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
                  downrelu,
-                 nn.Conv2d(ngf * 4, ngf * 2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+                 nn.Conv3d(ngf * 4, ngf * 2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
                  downrelu]
 
         self.middle=nn.Sequential(*conv3)
 
-        self.upsample1=nn.UpsamplingBilinear2d(scale_factor=2)
-        up1=[nn.Conv2d(ngf * 4, ngf * 2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+        self.upsample1=nn.Upsample(scale_factor=2, mode='trilinear')
+        up1=[nn.Conv3d(ngf * 4, ngf * 2, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
                  uprelu,
-                 nn.Conv2d(ngf * 2, ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+                 nn.Conv3d(ngf * 2, ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
              uprelu]
 
         self.up1=nn.Sequential(*up1)
 
-        self.upsample2=nn.UpsamplingBilinear2d(scale_factor=2)
-        up2=[nn.Conv2d(ngf * 2, ngf * 1, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+        self.upsample2=nn.Upsample(scale_factor=2, mode='trilinear')
+        up2=[nn.Conv3d(ngf * 2, ngf * 1, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
              uprelu,
-                 nn.Conv2d(ngf , ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
+                 nn.Conv3d(ngf , ngf, kernel_size=3, stride=1, padding=1, bias=use_bias), norm_layer(ngf),
              uprelu]
 
         self.up2=nn.Sequential(*up2)
 
-        self.final_conv=nn.Conv2d(ngf * 1, output_nc, kernel_size=3, stride=1, padding=1, bias=use_bias)
+        self.final_conv=nn.Conv3d(ngf * 1, output_nc, kernel_size=3, stride=1, padding=1, bias=use_bias)
 
     def forward(self, x):
         conv1=self.down1(x)               #32*128*128
