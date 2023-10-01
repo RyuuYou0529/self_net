@@ -11,6 +11,7 @@ from ssim_3d import SSIM3D
 from Charbonnier_loss import L1_Charbonnier_loss
 import time
 
+from torch.utils.tensorboard import SummaryWriter
 
 def adjust_lr(init_lr,optimizer,epoch,step,gamma):
     if (epoch+1)%step==0:
@@ -67,7 +68,7 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
     deblur_net.train()
 
     fakeA_pool=pytorch_dataset.ImagePool(50)
-    fakeB_pool = pytorch_dataset.ImagePool(50)
+    fakeB_pool=pytorch_dataset.ImagePool(50)
 
     Loss_D=0.0
     Loss_G_GAN=0.0
@@ -76,13 +77,14 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
     Loss_feedback=0.0
     Loss_deblur=0.0
 
-
+    writer = SummaryWriter(log_dir=os.path.join(args.path, 'checkpoint/tensorboard'))
+    total_iters= 0
     for epoch in range(args.epochs):
         param1 = optimD.param_groups[0]
         param2=optimG.param_groups[0]
-        adjust_lr(args.learning_rate_D, optimD, epoch,15,0.5)
-        adjust_lr(args.learning_rate_G, optimG, epoch,15,0.5)
-        adjust_lr(args.learning_rate_G, optim_deblur, epoch,15,0.5)
+        adjust_lr(args.learning_rate_D, optimD, epoch, 15, 0.5)
+        adjust_lr(args.learning_rate_G, optimG, epoch, 15, 0.5)
+        adjust_lr(args.learning_rate_G, optim_deblur, epoch, 15, 0.5)
 
         print(f'[epoch:{epoch+1}]  learning_rate_D:{param1["lr"]}')
         print(f'[epoch:{epoch+1}]  learning_rate_G:{param2["lr"]}')
@@ -94,6 +96,7 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
 
         for i, data in enumerate(train_set):
             batch_time_start = time.time()
+            total_iters += args.batch_size
 
             #degradation modeling
             A=data['hr_deg']
@@ -123,20 +126,26 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
 
             # GAN loss D_A(G_A(A))
             loss_G_A = lambda_gan*criterionGAN(netD_A(fake_B), True)
+            writer.add_scalar('Loss_G/loss_G_A', loss_G_A, global_step=total_iters)
             # GAN loss D_B(G_B(B))
             loss_G_B = lambda_gan*criterionGAN(netD_B(fake_A), True)
+            writer.add_scalar('Loss_G/loss_G_B', loss_G_B, global_step=total_iters)
 
 
             # Forward cycle loss || G_B(G_A(A)) - A||
             loss_cycle_A = lambda_cycle*criterionL1(rec_A,A)+lambda_ssim*(1-SSIM_loss(rec_A,A))
+            writer.add_scalar('Loss_G/loss_cycle_A', loss_cycle_A, global_step=total_iters)
 
             # Backward cycle loss || G_A(G_B(B)) - B||
             loss_cycle_B = lambda_cycle*criterionL1(rec_B,B)+lambda_ssim*(1-SSIM_loss(rec_B,B))
+            writer.add_scalar('Loss_G/loss_cycle_B', loss_cycle_B, global_step=total_iters)
 
 
             loss_feedback = lambda_feedback*(criterionL1(fake_C1, C)+lambda_ssim*(1-SSIM_loss(fake_C1,C)))
+            writer.add_scalar('Loss_G/loss_feedback', loss_feedback, global_step=total_iters)
 
             loss_G = loss_G_A + loss_G_B + loss_cycle_A + loss_cycle_B + loss_feedback
+            writer.add_scalar('Loss_G/loss_G', loss_G, global_step=total_iters)
 
             loss_G.backward()
             optimG.step()
@@ -149,25 +158,24 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
                 optimD.zero_grad()
 
                 fake_B = fakeB_pool.query(fake_B)
-
-                loss_D_A =backward_D_basic(lambda_gan,netD_A, criterionGAN, B, fake_B, 'lsgan', device)
+                loss_D_A = backward_D_basic(lambda_gan,netD_A, criterionGAN, B, fake_B, 'lsgan', device)
 
                 fake_A = fakeA_pool.query(fake_A)
-                loss_D_B = backward_D_basic(lambda_gan,netD_B,criterionGAN,A,fake_A,'lsgan',device)
+                loss_D_B = backward_D_basic(lambda_gan,netD_B, criterionGAN, A, fake_A, 'lsgan', device)
 
                 optimD.step()
 
             else:
                 loss_D_A=torch.Tensor([0.0])
                 loss_D_B=torch.Tensor([0.0])
+            writer.add_scalar('Loss_D/loss_D_A', loss_D_A, global_step=total_iters)
+            writer.add_scalar('Loss_D/loss_D_B', loss_D_B, global_step=total_iters)
 
             #Checkpoint
-            Loss_D += loss_D_A.item() + loss_D_B.item()
-            Loss_G_GAN+=loss_G_A.item()+loss_G_B.item()
-
-            Loss_feedback+=loss_feedback.item()
-
-            Loss_G_cycle+=loss_cycle_A.item()+loss_cycle_B.item()
+            Loss_D += loss_D_A.item()+loss_D_B.item()
+            Loss_G_GAN += loss_G_A.item()+loss_G_B.item()
+            Loss_feedback += loss_feedback.item()
+            Loss_G_cycle += loss_cycle_A.item()+loss_cycle_B.item()
 
             if (i + 1) % args.log_interval == 0:
                 print(f'[epochs: {epoch+1} {(i+1)*args.batch_size}/{len(train_set.dataset)}] [degradation modeling stage]: '
@@ -175,7 +183,6 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
                       f'loss_G: {Loss_G_GAN/(args.log_interval*lambda_gan):4f}, '
                       f'loss_G_cycle:{Loss_G_cycle / (args.log_interval*lambda_cycle):4f}, '
                       f'loss_feedback:{Loss_feedback/(args.log_interval):4f}')
-
                 Loss_D = 0.0
                 Loss_G_GAN = 0.0
                 Loss_G_cycle = 0.0
@@ -189,6 +196,7 @@ def train(train_set,netD_A,netD_B,netG_A,netG_B,deblur_net,args,device,criterion
             optim_deblur.zero_grad()
 
             loss_deblur = lambda_deblur * criterionL1(fake_C2, C) + lambda_ssim * (1 - SSIM_loss(fake_C2, C))
+            writer.add_scalar('Loss_Deblur/loss_deblur', loss_deblur, global_step=total_iters)
 
             loss_deblur.backward()
             optim_deblur.step()
@@ -228,6 +236,8 @@ def main():
     parser.add_argument('--log_interval',type=int,default=5)
     parser.add_argument('--imshow_interval',type=int,default=250)
 
+    parser.add_argument('--net_G',type=str,default='care')
+
     args=parser.parse_args()
 
     checkpoint_path=os.path.join(args.path, 'checkpoint/')
@@ -265,10 +275,10 @@ def main():
     netD_A = Self_net_architecture.define_D(input_nc=input_nc, ndf=64, netD='n_layers', n_layers_D=2, device=device,norm='instance')
     netD_B = Self_net_architecture.define_D(input_nc=input_nc, ndf=64, netD='n_layers', n_layers_D=2, device=device,norm='instance')
 
-    netG_A = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='care', device=device,use_dropout=False,norm='instance')
-    netG_B = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='care', device=device,use_dropout=False,norm='instance')
+    netG_A = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
+    netG_B = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
 
-    deblur_net=Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='care', device=device,use_dropout=False,norm='instance')
+    deblur_net=Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
 
     criterionGAN=Self_net_architecture.GANLoss(gan_mode='lsgan').to(device)
 

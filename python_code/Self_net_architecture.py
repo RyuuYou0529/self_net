@@ -5,6 +5,8 @@ import functools
 import math
 import torch.nn.functional as F
 
+from mwcnn import MWCNN3d
+
 
 '''
 Our code is partially built on Cycle-consistent Generative Adversarial Networks (**CycleGANs**) 
@@ -101,8 +103,11 @@ def define_G(input_nc, output_nc, ngf, netG, device, norm='batch', use_dropout=F
     if netG == 'deblur_net':
         net = Deblur_Net_3D(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, n_blocks=4)
 
-    elif netG=='care':
-        net=Care_net_3D(input_nc, output_nc, ngf, norm_layer=norm_layer)
+    elif netG == 'care':
+        net = Care_net_3D(input_nc, output_nc, ngf, norm_layer=norm_layer)
+
+    elif netG == 'mwcnn':
+        net = MWCNN3d(input_nc, output_nc, layer_num=2)
 
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
@@ -403,23 +408,23 @@ class Care_net_3D(nn.Module):
         self.final_conv=nn.Conv3d(ngf * 1, output_nc, kernel_size=3, stride=1, padding=1, bias=use_bias)
 
     def forward(self, x):
-        conv1=self.down1(x)               #32*128*128
-        down1=self.maxpool1(conv1)        #32*64*64
+        conv1=self.down1(x)
+        down1=self.maxpool1(conv1)
 
-        conv2=self.down2(down1)           #64*64*64
-        down2=self.maxpool2(conv2)        #64*32*32
+        conv2=self.down2(down1)
+        down2=self.maxpool2(conv2)
 
-        middle=self.middle(down2)         #64*32*32
+        middle=self.middle(down2)
 
-        up1=self.upsample1(middle)        #64*64*64
-        up1=torch.cat((conv2,up1),1)      #128*64*64
-        up1=self.up1(up1)                 #32*64*64
+        up1=self.upsample1(middle)
+        up1=torch.cat((conv2,up1),1)
+        up1=self.up1(up1)
 
-        up2=self.upsample2(up1)           #32*128*128
-        up2=torch.cat((conv1,up2),1)      #64*128*128
-        up2=self.up2(up2)                 #32*128*128
+        up2=self.upsample2(up1)
+        up2=torch.cat((conv1,up2),1)
+        up2=self.up2(up2)
 
-        final=self.final_conv(up2)        #2*128*128
+        final=self.final_conv(up2)
 
 
         return final

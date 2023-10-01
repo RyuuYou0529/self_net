@@ -24,7 +24,7 @@ patch_size = 128
 signal_intensity_threshold=0  #parameter for selecting image patches containing signals
 
 hr_interval=1
-lr_interval=4
+lr_interval=3
 
 for i in range(0, len(os.listdir(hr_path)), hr_interval):
 
@@ -57,9 +57,9 @@ for i in range(0, len(os.listdir(lr_path)), lr_interval):
 
     lr.append(lr_img)
 
-hr = np.array(hr, dtype=np.float32)
-hr_deg = np.array(hr_deg, dtype=np.float32)
-lr = np.array(lr, dtype=np.float32)
+hr = np.asarray(hr, dtype=np.float32)
+hr_deg = np.asarray(hr_deg, dtype=np.float32)
+lr = np.asarray(lr, dtype=np.float32)
 print(hr.shape, hr_deg.shape, lr.shape)
 
 np.savez(path + '/train_data/train_data.npz', hr=hr, hr_deg=hr_deg, lr=lr)
