@@ -236,8 +236,6 @@ def main():
     parser.add_argument('--log_interval',type=int,default=5)
     parser.add_argument('--imshow_interval',type=int,default=250)
 
-    parser.add_argument('--net_G',type=str,default='care')
-
     args=parser.parse_args()
 
     checkpoint_path=os.path.join(args.path, 'checkpoint/')
@@ -275,10 +273,10 @@ def main():
     netD_A = Self_net_architecture.define_D(input_nc=input_nc, ndf=64, netD='n_layers', n_layers_D=2, device=device,norm='instance')
     netD_B = Self_net_architecture.define_D(input_nc=input_nc, ndf=64, netD='n_layers', n_layers_D=2, device=device,norm='instance')
 
-    netG_A = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
-    netG_B = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
+    netG_A = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='care', device=device,use_dropout=False,norm='instance')
+    netG_B = Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='care', device=device,use_dropout=False,norm='instance')
 
-    deblur_net=Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG=args.net_G, device=device,use_dropout=False,norm='instance')
+    deblur_net=Self_net_architecture.define_G(input_nc=input_nc, output_nc=output_nc, ngf=32, netG='mwcnn', device=device,use_dropout=False,norm='instance')
 
     criterionGAN=Self_net_architecture.GANLoss(gan_mode='lsgan').to(device)
 

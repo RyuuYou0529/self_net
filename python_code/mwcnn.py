@@ -97,30 +97,31 @@ class MWCNN3d(nn.Module):
             feature = feature//8
             self.up.append(DoubleConv3d(feature, feature))
         
-        self.final_conv = nn.Conv3d(out_channels, out_channels, kernel_size=1, padding='same')
+        self.final_conv = nn.Sequential(nn.Conv3d(out_channels, out_channels, kernel_size=3, padding='same'),
+                                        nn.Conv3d(out_channels, out_channels, kernel_size=1, padding='same'))
     
     def forward(self, x):
         skip_conn = []
         
         # down
-        x = self.dwt(x)
+        out = self.dwt(x)
         for i, down in enumerate(self.down):
-            x = down(x)
-            skip_conn.append(x)
-            x = self.dwt(x)
+            out = down(out)
+            skip_conn.append(out)
+            out = self.dwt(out)
 
         # bottom
-        x = self.bottom(x)
+        out = self.bottom(out)
 
         # up
         skip_conn.reverse()
         for i, up in enumerate(self.up):
-            x = self.iwt(x)
+            out = self.iwt(out)
             skip = skip_conn[i]
-            x = x + skip
-            x = up(x)
+            out = out + skip
+            out = up(out)
 
-        x = self.iwt(x)
-        x = self.final_conv(x)
+        out = self.iwt(out) + x
+        out = self.final_conv(out)
 
-        return(x)
+        return out
